@@ -39,4 +39,15 @@ async function getDeal(id, token) {
   }
 }
 
-export default { acceptBid, getMyDeals, getDeal };
+async function markCompleted(id, token) {
+  try {
+    const response = await axios.post(`${BASE_URL}/api/deals/${id}/complete`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+export default { acceptBid, getMyDeals, getDeal, markCompleted };

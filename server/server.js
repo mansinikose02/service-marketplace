@@ -12,6 +12,7 @@ const profileRoutes = require('./routes/profileRoutes');
 const requirementRoutes = require('./routes/requirementRoutes');
 const bidRoutes = require('./routes/bidRoutes');
 const dealRoutes = require('./routes/dealRoutes');
+const updateRoutes = require('./routes/updateRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -33,6 +34,7 @@ app.use('/api/profiles', profileRoutes);
 app.use('/api/requirements', requirementRoutes);
 app.use('/api/bids', bidRoutes);
 app.use('/api/deals', dealRoutes);
+app.use('/api/updates', updateRoutes);
 
 app.use(errorHandler);
 

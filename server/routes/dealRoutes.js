@@ -3,7 +3,7 @@
 const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const authorize = require('../middleware/authorize');
-const { acceptBid, getMyDeals, getDeal } = require('../controllers/dealController');
+const { acceptBid, getMyDeals, getDeal, markCompleted } = require('../controllers/dealController');
 
 const router = express.Router();
 
@@ -12,5 +12,6 @@ router.get('/mine', authenticate, getMyDeals);
 
 router.post('/accept/:bidId', authenticate, authorize('client'), acceptBid);
 router.get('/:id', authenticate, getDeal);
+router.post('/:id/complete', authenticate, markCompleted);
 
 module.exports = router;

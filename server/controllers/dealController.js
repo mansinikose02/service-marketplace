@@ -106,4 +106,33 @@ async function getDeal(req, res, next) {
   }
 }
 
-module.exports = { acceptBid, getMyDeals, getDeal };
+// POST /api/deals/:id/complete
+async function markCompleted(req, res, next) {
+  try {
+    const deal = await Deal.findById(req.params.id);
+    if (!deal) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    const isParticipant =
+      deal.clientId.toString() === req.user.id.toString() ||
+      deal.providerId.toString() === req.user.id.toString();
+
+    if (!isParticipant) {
+      return res.status(403).json({ message: 'Forbidden: you are not a participant in this deal' });
+    }
+
+    if (deal.status !== 'active') {
+      return res.status(409).json({ message: 'Deal is already completed' });
+    }
+
+    deal.status = 'completed';
+    await deal.save();
+
+    return res.status(200).json(deal.toObject());
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { acceptBid, getMyDeals, getDeal, markCompleted };
