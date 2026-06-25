@@ -13,6 +13,7 @@ import RequirementBidPage from './pages/RequirementBidPage';
 import MyBidsPage from './pages/MyBidsPage';
 import MyDealsPage from './pages/MyDealsPage';
 import DealDetailPage from './pages/DealDetailPage';
+import PublicProviderProfilePage from './pages/PublicProviderProfilePage';
 
 export default function App() {
   return (
@@ -32,6 +33,7 @@ export default function App() {
           <Route path="/client/requirements/:id" element={<RequirementDetailPage />} />
           <Route path="/client/deals" element={<MyDealsPage />} />
           <Route path="/client/deals/:id" element={<DealDetailPage />} />
+          <Route path="/providers/:providerId" element={<PublicProviderProfilePage />} />
         </Route>
 
         {/* Mode A: require provider role */}
@@ -43,6 +45,7 @@ export default function App() {
           <Route path="/provider/bids" element={<MyBidsPage />} />
           <Route path="/provider/deals" element={<MyDealsPage />} />
           <Route path="/provider/deals/:id" element={<DealDetailPage />} />
+          <Route path="/providers/:providerId" element={<PublicProviderProfilePage />} />
         </Route>
 
         {/* Catch-all */}

@@ -13,6 +13,7 @@ const requirementRoutes = require('./routes/requirementRoutes');
 const bidRoutes = require('./routes/bidRoutes');
 const dealRoutes = require('./routes/dealRoutes');
 const updateRoutes = require('./routes/updateRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
@@ -35,6 +36,7 @@ app.use('/api/requirements', requirementRoutes);
 app.use('/api/bids', bidRoutes);
 app.use('/api/deals', dealRoutes);
 app.use('/api/updates', updateRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 app.use(errorHandler);
 

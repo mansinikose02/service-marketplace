@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import profileService from '../services/profileService';
 import { VALID_CATEGORIES } from '../constants/categories';
+import Layout from '../components/Layout';
 
 const EMPTY_FORM = {
   pitch: '',
@@ -18,7 +19,9 @@ export default function ProviderProfilePage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState('');
   const [pitchComplete, setPitchComplete] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     async function fetchProfile() {
@@ -35,7 +38,6 @@ export default function ProviderProfilePage() {
         });
         setPitchComplete(data.pitchComplete ?? false);
       } catch (err) {
-        // 404 means no profile yet — leave empty form, no error shown
         if (!err.message.includes('not found') && !err.message.includes('404')) {
           setError(err.message);
         }
@@ -66,6 +68,8 @@ export default function ProviderProfilePage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    setSaveSuccess('');
+    setIsSubmitting(true);
     try {
       const payload = {
         ...form,
@@ -76,110 +80,110 @@ export default function ProviderProfilePage() {
       };
       const data = await profileService.upsertProfile(payload, token);
       setPitchComplete(data.pitchComplete ?? false);
+      setSaveSuccess('Profile saved.');
     } catch (err) {
       setError(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
-  if (loading) return <p>Loading profile...</p>;
+  if (loading) return <Layout><p className="text-gray-500">Loading…</p></Layout>;
 
   return (
-    <div>
-      <h1>Provider Profile</h1>
+    <Layout>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Provider Profile</h1>
+        {pitchComplete !== null && (
+          <span className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${pitchComplete ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+            {pitchComplete ? '✓ Profile Complete' : '⚠ Profile Incomplete'}
+          </span>
+        )}
+      </div>
 
-      {pitchComplete !== null && (
-        <span style={{ marginBottom: '1rem', display: 'inline-block', padding: '2px 10px', borderRadius: '12px', background: pitchComplete ? '#d1fae5' : '#fee2e2', color: pitchComplete ? '#065f46' : '#991b1b' }}>
-          {pitchComplete ? 'Complete' : 'Incomplete'}
-        </span>
-      )}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+        {saveSuccess && <p className="text-sm text-green-600 mb-4">{saveSuccess}</p>}
 
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label htmlFor="pitch" className="block text-sm font-medium text-gray-700 mb-1">
+              Pitch <span className="text-gray-400 font-normal">(min 100 characters)</span>
+            </label>
+            <textarea
+              id="pitch"
+              name="pitch"
+              rows={6}
+              value={form.pitch}
+              onChange={handleChange}
+              placeholder="Describe your services, experience, and what makes you stand out…"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
 
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label htmlFor="pitch">Pitch</label><br />
-          <textarea
-            id="pitch"
-            name="pitch"
-            rows={6}
-            value={form.pitch}
-            onChange={handleChange}
-          />
-        </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Service Categories <span className="text-gray-400 font-normal">(1–5)</span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {VALID_CATEGORIES.map((cat) => {
+                const selected = form.categories.includes(cat);
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => handleCategoryToggle(cat)}
+                    className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                      selected
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 font-medium'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                    }`}
+                  >
+                    {selected && <span className="mr-1">✓</span>}{cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-        <div>
-          <fieldset>
-            <legend>Categories</legend>
-            {VALID_CATEGORIES.map((cat) => (
-              <label key={cat} style={{ display: 'block' }}>
-                <input
-                  type="checkbox"
-                  checked={form.categories.includes(cat)}
-                  onChange={() => handleCategoryToggle(cat)}
-                />
-                {' '}{cat}
-              </label>
-            ))}
-          </fieldset>
-        </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="capacity" className="block text-sm font-medium text-gray-700 mb-1">Capacity (concurrent projects)</label>
+              <input id="capacity" name="capacity" type="number" value={form.capacity} onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label htmlFor="teamSize" className="block text-sm font-medium text-gray-700 mb-1">Team Size</label>
+              <input id="teamSize" name="teamSize" type="number" value={form.teamSize} onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
 
-        <div>
-          <label htmlFor="capacity">Capacity (concurrent projects)</label><br />
-          <input
-            id="capacity"
-            name="capacity"
-            type="number"
-            value={form.capacity}
-            onChange={handleChange}
-          />
-        </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="typicalBudgetMin" className="block text-sm font-medium text-gray-700 mb-1">Typical Budget Min ($)</label>
+              <input id="typicalBudgetMin" name="typicalBudgetMin" type="number" value={form.typicalBudgetMin} onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label htmlFor="typicalBudgetMax" className="block text-sm font-medium text-gray-700 mb-1">Typical Budget Max ($)</label>
+              <input id="typicalBudgetMax" name="typicalBudgetMax" type="number" value={form.typicalBudgetMax} onChange={handleChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
 
-        <div>
-          <label htmlFor="teamSize">Team Size</label><br />
-          <input
-            id="teamSize"
-            name="teamSize"
-            type="number"
-            value={form.teamSize}
-            onChange={handleChange}
-          />
-        </div>
+          <div>
+            <label htmlFor="websiteUrl" className="block text-sm font-medium text-gray-700 mb-1">Website URL</label>
+            <input id="websiteUrl" name="websiteUrl" type="text" value={form.websiteUrl} onChange={handleChange}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
 
-        <div>
-          <label htmlFor="typicalBudgetMin">Typical Budget Min ($)</label><br />
-          <input
-            id="typicalBudgetMin"
-            name="typicalBudgetMin"
-            type="number"
-            value={form.typicalBudgetMin}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="typicalBudgetMax">Typical Budget Max ($)</label><br />
-          <input
-            id="typicalBudgetMax"
-            name="typicalBudgetMax"
-            type="number"
-            value={form.typicalBudgetMax}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="websiteUrl">Website URL</label><br />
-          <input
-            id="websiteUrl"
-            name="websiteUrl"
-            type="text"
-            value={form.websiteUrl}
-            onChange={handleChange}
-          />
-        </div>
-
-        <button type="submit">Save Profile</button>
-      </form>
-    </div>
+          <button type="submit" disabled={isSubmitting}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
+            {isSubmitting ? 'Saving…' : 'Save Profile'}
+          </button>
+        </form>
+      </div>
+    </Layout>
   );
 }

@@ -5,11 +5,18 @@ import requirementService from '../services/requirementService';
 import bidService from '../services/bidService';
 import dealService from '../services/dealService';
 import { VALID_CATEGORIES } from '../constants/categories';
+import Layout from '../components/Layout';
 
-const BID_STATUS_COLORS = {
-  pending:  { background: '#dbeafe', color: '#1e40af' },
-  accepted: { background: '#d1fae5', color: '#065f46' },
-  declined: { background: '#fee2e2', color: '#991b1b' },
+const STATUS_CLASSES = {
+  open:   'bg-blue-100 text-blue-800',
+  sealed: 'bg-yellow-100 text-yellow-800',
+  closed: 'bg-gray-100 text-gray-600',
+};
+
+const BID_STATUS_CLASSES = {
+  pending:  'bg-yellow-100 text-yellow-800',
+  accepted: 'bg-green-100 text-green-800',
+  declined: 'bg-gray-100 text-gray-600',
 };
 
 export default function RequirementDetailPage() {
@@ -20,19 +27,13 @@ export default function RequirementDetailPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
-  // Edit form state
   const [editForm, setEditForm] = useState({});
   const [updateError, setUpdateError] = useState('');
   const [updateSuccess, setUpdateSuccess] = useState('');
-
-  // Close state
   const [closeError, setCloseError] = useState('');
 
-  // Proposals (bids) state
   const [bids, setBids] = useState([]);
   const [bidsError, setBidsError] = useState('');
-
-  // Accept bid state
   const [acceptError, setAcceptError] = useState('');
   const [dealCreatedMessage, setDealCreatedMessage] = useState('');
 
@@ -55,7 +56,6 @@ export default function RequirementDetailPage() {
         setLoading(false);
       }
     }
-
     async function fetchBids() {
       try {
         const data = await bidService.getBidsForRequirement(id, token);
@@ -64,7 +64,6 @@ export default function RequirementDetailPage() {
         setBidsError(err.message);
       }
     }
-
     fetchRequirement();
     fetchBids();
   }, [id, token]);
@@ -86,7 +85,7 @@ export default function RequirementDetailPage() {
       };
       const updated = await requirementService.updateRequirement(id, payload, token);
       setRequirement(updated);
-      setUpdateSuccess('Requirement updated successfully.');
+      setUpdateSuccess('Requirement updated.');
     } catch (err) {
       setUpdateError(err.message);
     }
@@ -94,10 +93,7 @@ export default function RequirementDetailPage() {
 
   async function handleClose() {
     setCloseError('');
-    const confirmed = window.confirm(
-      'Are you sure you want to close this requirement? This cannot be undone.'
-    );
-    if (!confirmed) return;
+    if (!window.confirm('Close this requirement? This cannot be undone.')) return;
     try {
       const updated = await requirementService.closeRequirement(id, token);
       setRequirement(updated);
@@ -109,179 +105,158 @@ export default function RequirementDetailPage() {
   async function handleAcceptBid(bidId) {
     setAcceptError('');
     setDealCreatedMessage('');
-    const confirmed = window.confirm('Accept this proposal and create a deal?');
-    if (!confirmed) return;
+    if (!window.confirm('Accept this proposal and create a deal?')) return;
     try {
       await dealService.acceptBid(bidId, token);
-      // Seal the requirement in local state so edit/close controls hide immediately
       setRequirement((prev) => ({ ...prev, status: 'sealed' }));
-      // Re-fetch bids so all statuses (accepted/declined) update in the UI
       const refreshedBids = await bidService.getBidsForRequirement(id, token);
       setBids(refreshedBids);
-      setDealCreatedMessage('Deal created! ');
+      setDealCreatedMessage('Deal created!');
     } catch (err) {
       setAcceptError(err.message);
     }
   }
 
-  if (loading) return <p>Loading requirement...</p>;
-  if (fetchError) return <p style={{ color: 'red' }}>{fetchError}</p>;
+  if (loading) return <Layout><p className="text-gray-500">Loading…</p></Layout>;
+  if (fetchError) return <Layout><p className="text-sm text-red-600">{fetchError}</p></Layout>;
   if (!requirement) return null;
 
   const isOpen = requirement.status === 'open';
 
   return (
-    <div>
-      <h1>{requirement.title}</h1>
+    <Layout>
+      <div className="mb-4">
+        <Link to="/client/requirements" className="text-sm text-indigo-600 hover:underline">← Back</Link>
+      </div>
 
-      {/* Display fields */}
-      <p><strong>Category:</strong> {requirement.category}</p>
-      <p><strong>Status:</strong> {requirement.status}</p>
-      <p><strong>Description:</strong> {requirement.description}</p>
-      <p><strong>Budget:</strong> ${requirement.budgetMin} – ${requirement.budgetMax}</p>
-      <p><strong>Timeline:</strong> {requirement.timeline}</p>
-
-      {/* Close button — only when open */}
-      {isOpen && (
-        <div style={{ margin: '1rem 0' }}>
-          <button
-            onClick={handleClose}
-            style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 16px', borderRadius: '4px', cursor: 'pointer' }}
-          >
-            Close Requirement
-          </button>
-          {closeError && <p style={{ color: 'red' }}>{closeError}</p>}
+      {/* Requirement info card */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-4">
+        <div className="flex items-start justify-between gap-4">
+          <h1 className="text-2xl font-bold text-gray-900">{requirement.title}</h1>
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${STATUS_CLASSES[requirement.status] ?? 'bg-gray-100 text-gray-600'}`}>
+            {requirement.status}
+          </span>
         </div>
-      )}
+        <p className="text-sm text-indigo-600 font-medium mt-1">{requirement.category}</p>
+        <p className="text-sm text-gray-700 mt-3">{requirement.description}</p>
+        <div className="flex gap-6 mt-4 text-sm text-gray-500">
+          <span>💰 ${requirement.budgetMin}–${requirement.budgetMax}</span>
+          <span>📅 {requirement.timeline}</span>
+        </div>
+        {isOpen && (
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={handleClose}
+              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Close Requirement
+            </button>
+            {closeError && <p className="text-sm text-red-600">{closeError}</p>}
+          </div>
+        )}
+      </div>
 
-      {/* Edit form — only when open */}
+      {/* Edit form card — only when open */}
       {isOpen && (
-        <div>
-          <h2>Edit Requirement</h2>
-
-          {updateError && <p style={{ color: 'red' }}>{updateError}</p>}
-          {updateSuccess && <p style={{ color: 'green' }}>{updateSuccess}</p>}
-
-          <form onSubmit={handleUpdate}>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-4">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Edit Requirement</h2>
+          {updateError && <p className="text-sm text-red-600 mb-3">{updateError}</p>}
+          {updateSuccess && <p className="text-sm text-green-600 mb-3">{updateSuccess}</p>}
+          <form onSubmit={handleUpdate} className="space-y-4">
             <div>
-              <label htmlFor="title">Title</label><br />
-              <input
-                id="title"
-                name="title"
-                type="text"
-                value={editForm.title ?? ''}
-                onChange={handleEditChange}
-              />
+              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+              <input id="title" name="title" type="text" value={editForm.title ?? ''} onChange={handleEditChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
-
             <div>
-              <label htmlFor="category">Category</label><br />
-              <select
-                id="category"
-                name="category"
-                value={editForm.category ?? ''}
-                onChange={handleEditChange}
-              >
+              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+              <select id="category" name="category" value={editForm.category ?? ''} onChange={handleEditChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                 <option value="">Select a category</option>
-                {VALID_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
+                {VALID_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
-
             <div>
-              <label htmlFor="description">Description</label><br />
-              <textarea
-                id="description"
-                name="description"
-                rows={6}
-                value={editForm.description ?? ''}
-                onChange={handleEditChange}
-              />
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+              <textarea id="description" name="description" rows={5} value={editForm.description ?? ''} onChange={handleEditChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
-
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="budgetMin" className="block text-sm font-medium text-gray-700 mb-1">Budget Min ($)</label>
+                <input id="budgetMin" name="budgetMin" type="number" value={editForm.budgetMin ?? ''} onChange={handleEditChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label htmlFor="budgetMax" className="block text-sm font-medium text-gray-700 mb-1">Budget Max ($)</label>
+                <input id="budgetMax" name="budgetMax" type="number" value={editForm.budgetMax ?? ''} onChange={handleEditChange}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            </div>
             <div>
-              <label htmlFor="budgetMin">Budget Min ($)</label><br />
-              <input
-                id="budgetMin"
-                name="budgetMin"
-                type="number"
-                value={editForm.budgetMin ?? ''}
-                onChange={handleEditChange}
-              />
+              <label htmlFor="timeline" className="block text-sm font-medium text-gray-700 mb-1">Timeline</label>
+              <input id="timeline" name="timeline" type="text" value={editForm.timeline ?? ''} onChange={handleEditChange}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
-
-            <div>
-              <label htmlFor="budgetMax">Budget Max ($)</label><br />
-              <input
-                id="budgetMax"
-                name="budgetMax"
-                type="number"
-                value={editForm.budgetMax ?? ''}
-                onChange={handleEditChange}
-              />
-            </div>
-
-            <div>
-              <label htmlFor="timeline">Timeline</label><br />
-              <input
-                id="timeline"
-                name="timeline"
-                type="text"
-                value={editForm.timeline ?? ''}
-                onChange={handleEditChange}
-              />
-            </div>
-
-            <button type="submit">Save Changes</button>
+            <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              Save Changes
+            </button>
           </form>
         </div>
       )}
 
-      {/* Proposals — read-only except for Accept button when requirement is open */}
-      <div style={{ marginTop: '2rem' }}>
-        <h2>Proposals</h2>
-        {bidsError && <p style={{ color: 'red' }}>{bidsError}</p>}
-        {acceptError && <p style={{ color: 'red' }}>{acceptError}</p>}
+      {/* Proposals section */}
+      <div>
+        <h2 className="text-lg font-semibold text-gray-800 mb-3">Proposals</h2>
+        {bidsError && <p className="text-sm text-red-600 mb-2">{bidsError}</p>}
+        {acceptError && <p className="text-sm text-red-600 mb-2">{acceptError}</p>}
         {dealCreatedMessage && (
-          <p style={{ color: 'green' }}>
-            {dealCreatedMessage}
-            <Link to="/client/deals">Go to My Deals</Link>
-          </p>
+          <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 mb-3 flex items-center gap-2 text-sm text-green-800">
+            ✅ {dealCreatedMessage}{' '}
+            <Link to="/client/deals" className="font-medium underline">Go to My Deals</Link>
+          </div>
         )}
         {bids.length === 0 ? (
-          <p>No proposals yet.</p>
+          <p className="text-center text-gray-500 py-8">No proposals yet.</p>
         ) : (
-          bids.map((bid) => (
-            <div
-              key={bid._id}
-              style={{ border: '1px solid #e5e7eb', borderRadius: '6px', padding: '12px', marginBottom: '12px' }}
-            >
-              <p><strong>{bid.providerName}</strong> — {bid.providerCompany}</p>
-              <p><strong>Proposed Budget:</strong> ${bid.proposedBudget}</p>
-              <p><strong>Proposed Timeline:</strong> {bid.proposedTimeline}</p>
-              <p><strong>Message:</strong> {bid.message}</p>
-              <span style={{
-                padding: '2px 8px',
-                borderRadius: '12px',
-                fontSize: '0.85rem',
-                ...(BID_STATUS_COLORS[bid.status] ?? {}),
-              }}>
-                {bid.status}
-              </span>
-              {/* Accept button — only for pending bids while requirement is still open */}
-              {isOpen && bid.status === 'pending' && (
-                <button
-                  onClick={() => handleAcceptBid(bid._id)}
-                  style={{ marginLeft: '12px', background: '#16a34a', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer' }}
-                >
-                  Accept Proposal
-                </button>
-              )}
-            </div>
-          ))
+          <div className="space-y-3">
+            {bids.map((bid) => (
+              <div key={bid._id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <Link
+                      to={`/providers/${bid.providerId}`}
+                      className="text-sm font-semibold text-indigo-600 hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {bid.providerName}
+                    </Link>
+                    <p className="text-xs text-gray-500">{bid.providerCompany}</p>
+                    <div className="flex gap-4 mt-2 text-sm text-gray-600">
+                      <span>💰 ${bid.proposedBudget}</span>
+                      <span>📅 {bid.proposedTimeline}</span>
+                    </div>
+                    <p className="text-sm text-gray-500 mt-2">{bid.message}</p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2 shrink-0">
+                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${BID_STATUS_CLASSES[bid.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                      {bid.status}
+                    </span>
+                    {isOpen && bid.status === 'pending' && (
+                      <button
+                        onClick={() => handleAcceptBid(bid._id)}
+                        className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        Accept
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
-    </div>
+    </Layout>
   );
 }

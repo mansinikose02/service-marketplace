@@ -1,43 +1,58 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import dealService from '../services/dealService';
 import updateService from '../services/updateService';
+import reviewService from '../services/reviewService';
+import Layout from '../components/Layout';
 
-const STATUS_COLORS = {
-  active:    { background: '#dbeafe', color: '#1e40af' },
-  completed: { background: '#d1fae5', color: '#065f46' },
+const STATUS_CLASSES = {
+  active:    'bg-blue-100 text-blue-800',
+  completed: 'bg-green-100 text-green-800',
 };
 
 export default function DealDetailPage() {
   const { id } = useParams();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
 
   const [deal, setDeal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Update thread state
   const [updates, setUpdates] = useState([]);
   const [updatesError, setUpdatesError] = useState('');
   const [newContent, setNewContent] = useState('');
   const [postError, setPostError] = useState('');
 
-  // Mark complete state
   const [completeError, setCompleteError] = useState('');
+
+  const [existingReview, setExistingReview] = useState(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewError, setReviewError] = useState('');
 
   useEffect(() => {
     async function fetchDeal() {
       try {
         const data = await dealService.getDeal(id, token);
         setDeal(data);
+        if (data.status === 'completed' && user?.role === 'client') {
+          try {
+            const { reviews } = await reviewService.getProviderReviews(data.providerId, token);
+            const matchingReview = reviews.find(
+              (r) => r.dealId === id || r.dealId?._id === id || r.dealId?.toString() === id
+            );
+            if (matchingReview) setExistingReview(matchingReview);
+          } catch {
+            // ignore — form will show instead
+          }
+        }
       } catch (err) {
         setError(err.message);
       } finally {
         setLoading(false);
       }
     }
-
     async function fetchUpdates() {
       try {
         const data = await updateService.getUpdates(id, token);
@@ -46,10 +61,9 @@ export default function DealDetailPage() {
         setUpdatesError(err.message);
       }
     }
-
     fetchDeal();
     fetchUpdates();
-  }, [id, token]);
+  }, [id, token, user?.role]);
 
   async function handlePostUpdate(e) {
     e.preventDefault();
@@ -65,8 +79,7 @@ export default function DealDetailPage() {
 
   async function handleMarkCompleted() {
     setCompleteError('');
-    const confirmed = window.confirm('Mark this deal as completed? This cannot be undone.');
-    if (!confirmed) return;
+    if (!window.confirm('Mark this deal as completed? This cannot be undone.')) return;
     try {
       const updatedDeal = await dealService.markCompleted(id, token);
       setDeal(updatedDeal);
@@ -75,113 +88,191 @@ export default function DealDetailPage() {
     }
   }
 
-  if (loading) return <p>Loading deal...</p>;
-  if (error) return <p style={{ color: 'red' }}>{error}</p>;
+  async function handleSubmitReview(e) {
+    e.preventDefault();
+    setReviewError('');
+    try {
+      const savedReview = await reviewService.submitReview(
+        { dealId: id, rating: reviewRating, comment: reviewComment },
+        token
+      );
+      setExistingReview(savedReview);
+    } catch (err) {
+      setReviewError(err.message);
+    }
+  }
+
+  const backPath = user?.role === 'client' ? '/client/deals' : '/provider/deals';
+
+  if (loading) return <Layout><p className="text-gray-500">Loading…</p></Layout>;
+  if (error) return <Layout><p className="text-sm text-red-600">{error}</p></Layout>;
   if (!deal) return null;
 
   return (
-    <div>
-      <h1>{deal.title}</h1>
+    <Layout>
+      <div className="mb-4">
+        <Link to={backPath} className="text-sm text-indigo-600 hover:underline">← Back to deals</Link>
+      </div>
 
-      <span style={{
-        display: 'inline-block',
-        marginBottom: '1rem',
-        padding: '2px 10px',
-        borderRadius: '12px',
-        fontSize: '0.85rem',
-        ...(STATUS_COLORS[deal.status] ?? {}),
-      }}>
-        {deal.status}
-      </span>
-
-      <section style={{ marginBottom: '1.5rem' }}>
-        <h2>Deal Terms</h2>
-        <p><strong>Agreed Budget:</strong> ${deal.agreedBudget}</p>
-        <p><strong>Agreed Timeline:</strong> {deal.agreedTimeline}</p>
-      </section>
-
-      <section style={{ marginBottom: '1.5rem' }}>
-        <h2>Client</h2>
-        <p><strong>Name:</strong> {deal.clientName}</p>
-        <p><strong>Company:</strong> {deal.clientCompany}</p>
-      </section>
-
-      <section style={{ marginBottom: '1.5rem' }}>
-        <h2>Provider</h2>
-        <p><strong>Name:</strong> {deal.providerName}</p>
-        <p><strong>Company:</strong> {deal.providerCompany}</p>
-      </section>
-
-      {/* Mark Complete button — only when deal is active */}
-      {deal.status === 'active' && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <button
-            onClick={handleMarkCompleted}
-            style={{ background: '#16a34a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer' }}
-          >
-            Mark as Completed
-          </button>
-          {completeError && <p style={{ color: 'red' }}>{completeError}</p>}
+      {/* Deal header card */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-4">
+        <div className="flex items-start justify-between gap-4 mb-3">
+          <h1 className="text-2xl font-bold text-gray-900">{deal.title}</h1>
+          <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${STATUS_CLASSES[deal.status] ?? 'bg-gray-100 text-gray-600'}`}>
+            {deal.status}
+          </span>
         </div>
-      )}
 
-      {/* Deal Room — update thread */}
-      <section style={{ marginTop: '2rem' }}>
-        <h2>Deal Room</h2>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-500 mb-0.5">Agreed Budget</p>
+            <p className="text-sm font-semibold text-gray-900">${deal.agreedBudget}</p>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3">
+            <p className="text-xs text-gray-500 mb-0.5">Timeline</p>
+            <p className="text-sm font-semibold text-gray-900">{deal.agreedTimeline}</p>
+          </div>
+        </div>
 
-        {updatesError && <p style={{ color: 'red' }}>{updatesError}</p>}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs text-gray-500 mb-0.5">Client</p>
+            <p className="text-sm font-medium text-gray-900">{deal.clientName}</p>
+            <p className="text-xs text-gray-500">{deal.clientCompany}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500 mb-0.5">Provider</p>
+            <p className="text-sm font-medium text-gray-900">{deal.providerName}</p>
+            <p className="text-xs text-gray-500">{deal.providerCompany}</p>
+          </div>
+        </div>
 
-        <div style={{ marginBottom: '1.5rem' }}>
+        {deal.status === 'active' && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+            <button
+              onClick={handleMarkCompleted}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Mark as Completed
+            </button>
+            {completeError && <p className="text-sm text-red-600">{completeError}</p>}
+          </div>
+        )}
+      </div>
+
+      {/* Deal Room thread */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-4">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Deal Room</h2>
+
+        {updatesError && <p className="text-sm text-red-600 mb-3">{updatesError}</p>}
+
+        <div className="space-y-3 mb-5">
           {updates.length === 0 ? (
-            <p style={{ color: '#6b7280' }}>No updates yet. Start the conversation below.</p>
+            <p className="text-sm text-gray-400 text-center py-4">No updates yet. Start the conversation.</p>
           ) : (
-            updates.map((update) => (
-              <div
-                key={update._id}
-                style={{
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '6px',
-                  padding: '12px',
-                  marginBottom: '12px',
-                  background: update.authorRole === 'client' ? '#f0f9ff' : '#fef3c7',
-                }}
-              >
-                <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '4px' }}>
-                  <strong>{update.authorName}</strong> ({update.authorRole}) —{' '}
-                  {new Date(update.createdAt).toLocaleString()}
-                </p>
-                <p style={{ whiteSpace: 'pre-wrap' }}>{update.content}</p>
-              </div>
-            ))
+            updates.map((update) => {
+              const isCurrentUser = update.authorRole === user?.role;
+              return (
+                <div key={update._id} className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-sm rounded-xl px-4 py-3 ${isCurrentUser ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-900'}`}>
+                    <p className={`text-xs mb-1 ${isCurrentUser ? 'text-indigo-200' : 'text-gray-500'}`}>
+                      {update.authorName} · {new Date(update.createdAt).toLocaleString()}
+                    </p>
+                    <p className="text-sm whitespace-pre-wrap">{update.content}</p>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
 
         {deal.status === 'active' && (
-          <form onSubmit={handlePostUpdate}>
-            <div>
-              <label htmlFor="newContent">Post an update</label><br />
-              <textarea
-                id="newContent"
-                rows={4}
-                value={newContent}
-                onChange={(e) => setNewContent(e.target.value)}
-                placeholder="Share progress, ask questions, or provide feedback..."
-                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid #d1d5db' }}
-              />
-            </div>
-            {postError && <p style={{ color: 'red' }}>{postError}</p>}
-            <button type="submit" style={{ marginTop: '8px', padding: '6px 16px', borderRadius: '4px', background: '#2563eb', color: '#fff', border: 'none', cursor: 'pointer' }}>
+          <form onSubmit={handlePostUpdate} className="border-t border-gray-100 pt-4">
+            <textarea
+              id="newContent"
+              rows={3}
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
+              placeholder="Share progress, ask questions, or provide feedback…"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2"
+            />
+            {postError && <p className="text-sm text-red-600 mb-2">{postError}</p>}
+            <button type="submit"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
               Post Update
             </button>
           </form>
         )}
 
         {deal.status === 'completed' && (
-          <p style={{ color: '#6b7280', fontStyle: 'italic' }}>
+          <p className="text-sm text-gray-400 italic border-t border-gray-100 pt-4">
             This deal is completed. No further updates can be posted.
           </p>
         )}
-      </section>
-    </div>
+      </div>
+
+      {/* Review section */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <h2 className="text-lg font-semibold text-gray-800 mb-4">Review</h2>
+
+        {deal.status !== 'completed' && (
+          <p className="text-sm text-gray-500">You can leave a review once the deal is marked as completed.</p>
+        )}
+
+        {deal.status === 'completed' && user?.role === 'provider' && (
+          <p className="text-sm text-gray-500">The client will leave a review once the deal is completed.</p>
+        )}
+
+        {deal.status === 'completed' && user?.role === 'client' && existingReview && (
+          <div>
+            <p className="text-xs text-green-600 font-medium mb-2">✓ Review submitted</p>
+            <div className="flex gap-0.5 mb-2">
+              {Array.from({ length: 5 }, (_, i) => (
+                <span key={i} className={`text-xl ${i < existingReview.rating ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
+              ))}
+            </div>
+            <p className="text-sm text-gray-700">{existingReview.comment}</p>
+          </div>
+        )}
+
+        {deal.status === 'completed' && user?.role === 'client' && !existingReview && (
+          <form onSubmit={handleSubmitReview} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Rating</label>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                    className={`text-3xl leading-none transition-colors ${star <= reviewRating ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'}`}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label htmlFor="reviewComment" className="block text-sm font-medium text-gray-700 mb-1">
+                Comment (min 10 characters)
+              </label>
+              <textarea
+                id="reviewComment"
+                rows={4}
+                value={reviewComment}
+                onChange={(e) => setReviewComment(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            {reviewError && <p className="text-sm text-red-600">{reviewError}</p>}
+            <button type="submit"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              Submit Review
+            </button>
+          </form>
+        )}
+      </div>
+    </Layout>
   );
 }
