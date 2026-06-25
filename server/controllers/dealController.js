@@ -106,8 +106,83 @@ async function getDeal(req, res, next) {
   }
 }
 
-// POST /api/deals/:id/complete
-async function markCompleted(req, res, next) {
+// POST /api/deals/:id/submit  (provider only)
+async function submitForApproval(req, res, next) {
+  try {
+    const deal = await Deal.findById(req.params.id);
+    if (!deal) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    if (deal.providerId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: 'Forbidden: you are not the provider on this deal' });
+    }
+
+    if (deal.status !== 'active') {
+      return res.status(409).json({ message: 'Deal must be active to submit for approval' });
+    }
+
+    deal.status = 'pending_approval';
+    await deal.save();
+
+    return res.status(200).json(deal.toObject());
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/deals/:id/approve  (client only)
+async function approveCompletion(req, res, next) {
+  try {
+    const deal = await Deal.findById(req.params.id);
+    if (!deal) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    if (deal.clientId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: 'Forbidden: you are not the client on this deal' });
+    }
+
+    if (deal.status !== 'pending_approval') {
+      return res.status(409).json({ message: 'Deal must be pending approval to approve' });
+    }
+
+    deal.status = 'completed';
+    await deal.save();
+
+    return res.status(200).json(deal.toObject());
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/deals/:id/dispute  (client only)
+async function raiseDispute(req, res, next) {
+  try {
+    const deal = await Deal.findById(req.params.id);
+    if (!deal) {
+      return res.status(404).json({ message: 'Deal not found' });
+    }
+
+    if (deal.clientId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ message: 'Forbidden: you are not the client on this deal' });
+    }
+
+    if (deal.status !== 'pending_approval') {
+      return res.status(409).json({ message: 'Deal must be pending approval to raise a dispute' });
+    }
+
+    deal.status = 'disputed';
+    await deal.save();
+
+    return res.status(200).json(deal.toObject());
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/deals/:id/resolve  (any participant — resets to active)
+async function resolveDispute(req, res, next) {
   try {
     const deal = await Deal.findById(req.params.id);
     if (!deal) {
@@ -122,11 +197,11 @@ async function markCompleted(req, res, next) {
       return res.status(403).json({ message: 'Forbidden: you are not a participant in this deal' });
     }
 
-    if (deal.status !== 'active') {
-      return res.status(409).json({ message: 'Deal is already completed' });
+    if (deal.status !== 'disputed') {
+      return res.status(409).json({ message: 'Deal must be disputed to resolve' });
     }
 
-    deal.status = 'completed';
+    deal.status = 'active';
     await deal.save();
 
     return res.status(200).json(deal.toObject());
@@ -135,4 +210,4 @@ async function markCompleted(req, res, next) {
   }
 }
 
-module.exports = { acceptBid, getMyDeals, getDeal, markCompleted };
+module.exports = { acceptBid, getMyDeals, getDeal, submitForApproval, approveCompletion, raiseDispute, resolveDispute };

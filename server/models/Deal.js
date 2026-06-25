@@ -38,8 +38,8 @@ const dealSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: {
-        values: ['active', 'completed'],
-        message: 'Status must be active or completed',
+        values: ['active', 'pending_approval', 'disputed', 'completed'],
+        message: 'Status must be active, pending_approval, disputed, or completed',
       },
       default: 'active',
     },

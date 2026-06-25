@@ -7,9 +7,21 @@ import reviewService from '../services/reviewService';
 import Layout from '../components/Layout';
 
 const STATUS_CLASSES = {
-  active:    'bg-blue-100 text-blue-800',
-  completed: 'bg-green-100 text-green-800',
+  active:           'bg-blue-100 text-blue-800',
+  pending_approval: 'bg-yellow-100 text-yellow-800',
+  disputed:         'bg-red-100 text-red-800',
+  completed:        'bg-green-100 text-green-800',
 };
+
+const STATUS_LABELS = {
+  active:           'Active',
+  pending_approval: 'Pending Approval',
+  disputed:         'Disputed',
+  completed:        'Completed',
+};
+
+// Updates can be posted while deal is in any non-completed state
+const UPDATES_ALLOWED_STATUSES = new Set(['active', 'pending_approval', 'disputed']);
 
 export default function DealDetailPage() {
   const { id } = useParams();
@@ -24,7 +36,8 @@ export default function DealDetailPage() {
   const [newContent, setNewContent] = useState('');
   const [postError, setPostError] = useState('');
 
-  const [completeError, setCompleteError] = useState('');
+  // One shared error state for all status-transition actions
+  const [actionError, setActionError] = useState('');
 
   const [existingReview, setExistingReview] = useState(null);
   const [reviewRating, setReviewRating] = useState(0);
@@ -36,6 +49,7 @@ export default function DealDetailPage() {
       try {
         const data = await dealService.getDeal(id, token);
         setDeal(data);
+
         if (data.status === 'completed' && user?.role === 'client') {
           try {
             const { reviews } = await reviewService.getProviderReviews(data.providerId, token);
@@ -44,7 +58,7 @@ export default function DealDetailPage() {
             );
             if (matchingReview) setExistingReview(matchingReview);
           } catch {
-            // ignore — form will show instead
+            // Silently ignore — review form will show instead
           }
         }
       } catch (err) {
@@ -53,6 +67,7 @@ export default function DealDetailPage() {
         setLoading(false);
       }
     }
+
     async function fetchUpdates() {
       try {
         const data = await updateService.getUpdates(id, token);
@@ -61,6 +76,7 @@ export default function DealDetailPage() {
         setUpdatesError(err.message);
       }
     }
+
     fetchDeal();
     fetchUpdates();
   }, [id, token, user?.role]);
@@ -77,14 +93,14 @@ export default function DealDetailPage() {
     }
   }
 
-  async function handleMarkCompleted() {
-    setCompleteError('');
-    if (!window.confirm('Mark this deal as completed? This cannot be undone.')) return;
+  // Generic helper to run a deal action and update local state
+  async function runDealAction(actionFn) {
+    setActionError('');
     try {
-      const updatedDeal = await dealService.markCompleted(id, token);
+      const updatedDeal = await actionFn(id, token);
       setDeal(updatedDeal);
     } catch (err) {
-      setCompleteError(err.message);
+      setActionError(err.message);
     }
   }
 
@@ -108,6 +124,8 @@ export default function DealDetailPage() {
   if (error) return <Layout><p className="text-sm text-red-600">{error}</p></Layout>;
   if (!deal) return null;
 
+  const canPostUpdates = UPDATES_ALLOWED_STATUSES.has(deal.status);
+
   return (
     <Layout>
       <div className="mb-4">
@@ -119,7 +137,7 @@ export default function DealDetailPage() {
         <div className="flex items-start justify-between gap-4 mb-3">
           <h1 className="text-2xl font-bold text-gray-900">{deal.title}</h1>
           <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${STATUS_CLASSES[deal.status] ?? 'bg-gray-100 text-gray-600'}`}>
-            {deal.status}
+            {STATUS_LABELS[deal.status] ?? deal.status}
           </span>
         </div>
 
@@ -147,17 +165,69 @@ export default function DealDetailPage() {
           </div>
         </div>
 
-        {deal.status === 'active' && (
-          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+        {/* ── Status-action area ── */}
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          {actionError && <p className="text-sm text-red-600 mb-3">{actionError}</p>}
+
+          {/* ACTIVE — provider submits, client waits */}
+          {deal.status === 'active' && user?.role === 'provider' && (
             <button
-              onClick={handleMarkCompleted}
+              onClick={() => runDealAction(dealService.submitForApproval)}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
-              Mark as Completed
+              Submit Work for Approval
             </button>
-            {completeError && <p className="text-sm text-red-600">{completeError}</p>}
-          </div>
-        )}
+          )}
+          {deal.status === 'active' && user?.role === 'client' && (
+            <p className="text-sm text-gray-500">Waiting for the provider to submit work for approval.</p>
+          )}
+
+          {/* PENDING APPROVAL — client approves or disputes, provider waits */}
+          {deal.status === 'pending_approval' && user?.role === 'client' && (
+            <div>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 mb-3 text-sm text-yellow-800">
+                The provider has submitted work for your approval.
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => runDealAction(dealService.approveCompletion)}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Approve &amp; Complete
+                </button>
+                <button
+                  onClick={() => runDealAction(dealService.raiseDispute)}
+                  className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Raise a Dispute
+                </button>
+              </div>
+            </div>
+          )}
+          {deal.status === 'pending_approval' && user?.role === 'provider' && (
+            <p className="text-sm text-gray-500">Work submitted. Waiting for client approval.</p>
+          )}
+
+          {/* DISPUTED — both see banner and resolve button; provider also sees guidance */}
+          {deal.status === 'disputed' && (
+            <div>
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 mb-3 text-sm text-red-800 font-medium">
+                ⚠ This deal is under dispute.
+              </div>
+              {user?.role === 'provider' && (
+                <p className="text-sm text-gray-600 mb-3">
+                  The client has raised a dispute. Please address their concerns and resubmit.
+                </p>
+              )}
+              <button
+                onClick={() => runDealAction(dealService.resolveDispute)}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                Resolve Dispute
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Deal Room thread */}
@@ -186,7 +256,7 @@ export default function DealDetailPage() {
           )}
         </div>
 
-        {deal.status === 'active' && (
+        {canPostUpdates && (
           <form onSubmit={handlePostUpdate} className="border-t border-gray-100 pt-4">
             <textarea
               id="newContent"
@@ -211,68 +281,66 @@ export default function DealDetailPage() {
         )}
       </div>
 
-      {/* Review section */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Review</h2>
+      {/* Review section — only visible when deal is completed */}
+      {deal.status === 'completed' && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">Review</h2>
 
-        {deal.status !== 'completed' && (
-          <p className="text-sm text-gray-500">You can leave a review once the deal is marked as completed.</p>
-        )}
+          {user?.role === 'provider' && (
+            <p className="text-sm text-gray-500">The client will leave a review once the deal is completed.</p>
+          )}
 
-        {deal.status === 'completed' && user?.role === 'provider' && (
-          <p className="text-sm text-gray-500">The client will leave a review once the deal is completed.</p>
-        )}
-
-        {deal.status === 'completed' && user?.role === 'client' && existingReview && (
-          <div>
-            <p className="text-xs text-green-600 font-medium mb-2">✓ Review submitted</p>
-            <div className="flex gap-0.5 mb-2">
-              {Array.from({ length: 5 }, (_, i) => (
-                <span key={i} className={`text-xl ${i < existingReview.rating ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
-              ))}
-            </div>
-            <p className="text-sm text-gray-700">{existingReview.comment}</p>
-          </div>
-        )}
-
-        {deal.status === 'completed' && user?.role === 'client' && !existingReview && (
-          <form onSubmit={handleSubmitReview} className="space-y-4">
+          {user?.role === 'client' && existingReview && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Rating</label>
-              <div className="flex gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    onClick={() => setReviewRating(star)}
-                    aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
-                    className={`text-3xl leading-none transition-colors ${star <= reviewRating ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'}`}
-                  >
-                    ★
-                  </button>
+              <p className="text-xs text-green-600 font-medium mb-2">✓ Review submitted</p>
+              <div className="flex gap-0.5 mb-2">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <span key={i} className={`text-xl ${i < existingReview.rating ? 'text-amber-400' : 'text-gray-200'}`}>★</span>
                 ))}
               </div>
+              <p className="text-sm text-gray-700">{existingReview.comment}</p>
             </div>
-            <div>
-              <label htmlFor="reviewComment" className="block text-sm font-medium text-gray-700 mb-1">
-                Comment (min 10 characters)
-              </label>
-              <textarea
-                id="reviewComment"
-                rows={4}
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-            {reviewError && <p className="text-sm text-red-600">{reviewError}</p>}
-            <button type="submit"
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-              Submit Review
-            </button>
-          </form>
-        )}
-      </div>
+          )}
+
+          {user?.role === 'client' && !existingReview && (
+            <form onSubmit={handleSubmitReview} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Rating</label>
+                <div className="flex gap-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setReviewRating(star)}
+                      aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                      className={`text-3xl leading-none transition-colors ${star <= reviewRating ? 'text-amber-400' : 'text-gray-200 hover:text-amber-300'}`}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label htmlFor="reviewComment" className="block text-sm font-medium text-gray-700 mb-1">
+                  Comment (min 10 characters)
+                </label>
+                <textarea
+                  id="reviewComment"
+                  rows={4}
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              {reviewError && <p className="text-sm text-red-600">{reviewError}</p>}
+              <button type="submit"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                Submit Review
+              </button>
+            </form>
+          )}
+        </div>
+      )}
     </Layout>
   );
 }

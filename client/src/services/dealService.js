@@ -39,9 +39,9 @@ async function getDeal(id, token) {
   }
 }
 
-async function markCompleted(id, token) {
+async function submitForApproval(id, token) {
   try {
-    const response = await axios.post(`${BASE_URL}/api/deals/${id}/complete`, {}, {
+    const response = await axios.post(`${BASE_URL}/api/deals/${id}/submit`, {}, {
       headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
@@ -50,4 +50,37 @@ async function markCompleted(id, token) {
   }
 }
 
-export default { acceptBid, getMyDeals, getDeal, markCompleted };
+async function approveCompletion(id, token) {
+  try {
+    const response = await axios.post(`${BASE_URL}/api/deals/${id}/approve`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+async function raiseDispute(id, token) {
+  try {
+    const response = await axios.post(`${BASE_URL}/api/deals/${id}/dispute`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+async function resolveDispute(id, token) {
+  try {
+    const response = await axios.post(`${BASE_URL}/api/deals/${id}/resolve`, {}, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+export default { acceptBid, getMyDeals, getDeal, submitForApproval, approveCompletion, raiseDispute, resolveDispute };
