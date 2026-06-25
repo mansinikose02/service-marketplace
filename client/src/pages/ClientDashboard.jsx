@@ -24,6 +24,13 @@ const ACTION_CARDS = [
     to: '/client/deals',
     label: 'View deals',
   },
+  {
+    emoji: '🏢',
+    title: 'Browse Providers',
+    description: 'Find providers and view their profiles and reviews before posting.',
+    to: '/client/providers',
+    label: 'Browse providers',
+  },
 ];
 
 export default function ClientDashboard() {
@@ -38,7 +45,7 @@ export default function ClientDashboard() {
       </div>
 
       <h2 className="text-lg font-semibold text-gray-800 mb-3">Quick actions</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {ACTION_CARDS.map((card) => (
           <div key={card.to} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
             <span className="text-2xl mb-3">{card.emoji}</span>

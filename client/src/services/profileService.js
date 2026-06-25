@@ -50,4 +50,17 @@ async function getPublicProfile(userId, token) {
   }
 }
 
-export default { upsertProfile, getOwnProfile, updateProfile, getPublicProfile };
+async function listProviders(token, category) {
+  try {
+    const params = category ? { category } : {};
+    const response = await axios.get(`${BASE_URL}/api/profiles`, {
+      headers: { Authorization: `Bearer ${token}` },
+      params,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+export default { upsertProfile, getOwnProfile, updateProfile, getPublicProfile, listProviders };

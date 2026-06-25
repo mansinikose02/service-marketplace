@@ -1,6 +1,7 @@
 'use strict';
 
 const ProviderProfile = require('../models/ProviderProfile');
+const Review = require('../models/Review');
 const { computePitchComplete, VALID_CATEGORIES } = require('../utils/pitchComplete');
 
 const WEBSITE_URL_REGEX = /^https?:\/\/.+\..+/;
@@ -247,4 +248,67 @@ async function getPublicProfile(req, res, next) {
   }
 }
 
-module.exports = { upsertProfile, getOwnProfile, updateProfile, getPublicProfile };
+// ─── listProviders ────────────────────────────────────────────────────────────
+
+// GET /api/profiles  (any authenticated user)
+// Optional query: ?category=Web+Development
+async function listProviders(req, res, next) {
+  try {
+    const filter = { pitchComplete: true };
+    if (req.query.category) {
+      filter.categories = req.query.category;
+    }
+
+    const profiles = await ProviderProfile.find(filter)
+      .populate('userId', 'name company')
+      .sort({ createdAt: -1 });
+
+    if (profiles.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // Collect all provider userIds so we can aggregate ratings in one query
+    const providerIds = profiles.map((p) => p.userId._id);
+
+    // Single aggregation to get average rating and review count per provider
+    const ratingAggregation = await Review.aggregate([
+      { $match: { providerId: { $in: providerIds } } },
+      {
+        $group: {
+          _id: '$providerId',
+          averageRating: { $avg: '$rating' },
+          reviewCount: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Build a lookup map from providerId string → { averageRating, reviewCount }
+    const ratingMap = {};
+    for (const entry of ratingAggregation) {
+      ratingMap[entry._id.toString()] = {
+        averageRating: Math.round(entry.averageRating * 10) / 10,
+        reviewCount: entry.reviewCount,
+      };
+    }
+
+    const responseProfiles = profiles.map((profile) => {
+      const plain = profile.toObject();
+      const providerId = plain.userId._id.toString();
+      const ratingData = ratingMap[providerId] ?? { averageRating: null, reviewCount: 0 };
+
+      return {
+        ...plain,
+        name: plain.userId.name,
+        company: plain.userId.company,
+        userId: plain.userId._id,
+        ...ratingData,
+      };
+    });
+
+    return res.status(200).json(responseProfiles);
+  } catch (error) {
+    next(error);
+  }
+}
+
+module.exports = { upsertProfile, getOwnProfile, updateProfile, getPublicProfile, listProviders };

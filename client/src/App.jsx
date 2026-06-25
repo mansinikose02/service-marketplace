@@ -14,6 +14,7 @@ import MyBidsPage from './pages/MyBidsPage';
 import MyDealsPage from './pages/MyDealsPage';
 import DealDetailPage from './pages/DealDetailPage';
 import PublicProviderProfilePage from './pages/PublicProviderProfilePage';
+import ProviderDirectoryPage from './pages/ProviderDirectoryPage';
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/client/requirements/:id" element={<RequirementDetailPage />} />
           <Route path="/client/deals" element={<MyDealsPage />} />
           <Route path="/client/deals/:id" element={<DealDetailPage />} />
+          <Route path="/client/providers" element={<ProviderDirectoryPage />} />
           <Route path="/providers/:providerId" element={<PublicProviderProfilePage />} />
         </Route>
 
