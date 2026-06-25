@@ -1,6 +1,7 @@
 'use strict';
 
 const Requirement = require('../models/Requirement');
+const Bid = require('../models/Bid');
 const { VALID_CATEGORIES } = require('../utils/pitchComplete');
 
 // POST /api/requirements
@@ -39,7 +40,13 @@ async function listOwnRequirements(req, res, next) {
   try {
     const docs = await Requirement.find({ clientId: req.user.id }).sort({ createdAt: -1 });
 
-    const requirements = docs.map((doc) => ({ ...doc.toObject(), bidCount: 0 }));
+   const Bid = require('../models/Bid');
+const requirements = await Promise.all(
+  docs.map(async (doc) => {
+    const bidCount = await Bid.countDocuments({ requirementId: doc._id });
+    return { ...doc.toObject(), bidCount };
+  })
+);
 
     return res.status(200).json(requirements);
   } catch (err) {
