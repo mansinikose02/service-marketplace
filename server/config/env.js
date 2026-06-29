@@ -17,6 +17,7 @@ const config = Object.freeze({
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN,
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   PORT: parseInt(process.env.PORT, 10) || 5002,
+  CLIENT_URL: process.env.CLIENT_URL,
 });
 
 module.exports = config;

@@ -14,7 +14,7 @@ async function generateRequirement(req, res, next) {
     }
 
     const genAI = new GoogleGenerativeAI(config.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
     const prompt = `You are helping a business client write a professional 
 service requirement brief for a B2B marketplace.
