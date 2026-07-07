@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import requirementService from '../services/requirementService';
+import aiService from '../services/aiService';
 import Layout from '../components/Layout';
 
 const STATUS_CLASSES = {
@@ -17,6 +18,9 @@ export default function MyRequirementsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Per-card AI match state: { [requirementId]: { loading, matches, error } }
+  const [matchState, setMatchState] = useState({});
+
   useEffect(() => {
     async function fetchRequirements() {
       try {
@@ -30,6 +34,25 @@ export default function MyRequirementsPage() {
     }
     fetchRequirements();
   }, [token]);
+
+  async function handleFindMatches(requirementId) {
+    setMatchState((prev) => ({
+      ...prev,
+      [requirementId]: { loading: true, matches: null, error: '' },
+    }));
+    try {
+      const { matches } = await aiService.matchProviders(requirementId, token);
+      setMatchState((prev) => ({
+        ...prev,
+        [requirementId]: { loading: false, matches, error: '' },
+      }));
+    } catch (err) {
+      setMatchState((prev) => ({
+        ...prev,
+        [requirementId]: { loading: false, matches: null, error: err.message },
+      }));
+    }
+  }
 
   return (
     <Layout>
@@ -59,34 +82,85 @@ export default function MyRequirementsPage() {
       )}
 
       <div className="space-y-3">
-        {requirements.map((req) => (
-          <div
-            key={req._id}
-            onClick={() => navigate(`/client/requirements/${req._id}`)}
-            className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-semibold text-gray-900 truncate">{req.title}</h3>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <span className="text-xs text-gray-500">{req.category}</span>
-                  <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_CLASSES[req.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                    {req.status}
-                  </span>
+        {requirements.map((req) => {
+          const cardMatch = matchState[req._id];
+
+          return (
+            <div key={req._id}>
+              {/* Main requirement card */}
+              <div
+                onClick={() => navigate(`/client/requirements/${req._id}`)}
+                className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 cursor-pointer hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-gray-900 truncate">{req.title}</h3>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-xs text-gray-500">{req.category}</span>
+                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_CLASSES[req.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                        {req.status}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5">
+                      ${req.budgetMin}–${req.budgetMax} · {req.timeline}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      {req.bidCount} bid{req.bidCount !== 1 ? 's' : ''}
+                    </span>
+                    {/* Only show AI button for open requirements; stop card click propagation */}
+                    {req.status === 'open' && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleFindMatches(req._id); }}
+                        disabled={cardMatch?.loading}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50 transition-colors"
+                      >
+                        {cardMatch?.loading ? '✨ Finding…' : '✨ Find Providers'}
+                      </button>
+                    )}
+                    <span className="text-gray-400 text-sm">→</span>
+                  </div>
                 </div>
-                <p className="text-xs text-gray-400 mt-1.5">
-                  ${req.budgetMin}–${req.budgetMax} · {req.timeline}
-                </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                  {req.bidCount} bid{req.bidCount !== 1 ? 's' : ''}
-                </span>
-                <span className="text-gray-400 text-sm">→</span>
-              </div>
+
+              {/* AI matches panel — shown below the card when results are available */}
+              {cardMatch && !cardMatch.loading && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-b-xl px-5 py-4 -mt-1">
+                  {cardMatch.error && (
+                    <p className="text-xs text-red-600">{cardMatch.error}</p>
+                  )}
+                  {!cardMatch.error && cardMatch.matches !== null && (
+                    <>
+                      <p className="text-xs font-semibold text-indigo-800 mb-3">✨ AI-suggested matches</p>
+                      {cardMatch.matches.length === 0 ? (
+                        <p className="text-xs text-indigo-600">No matching providers found yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {cardMatch.matches.map((match) => (
+                            <div key={match.providerId} className="flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-indigo-900">{match.providerName}</p>
+                                <p className="text-xs text-indigo-700 mt-0.5">{match.reason}</p>
+                              </div>
+                              <Link
+                                to={`/providers/${match.providerId}`}
+                                className="shrink-0 text-xs text-indigo-600 hover:underline font-medium"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                View Profile →
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Layout>
   );

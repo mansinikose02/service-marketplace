@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import requirementService from '../services/requirementService';
 import bidService from '../services/bidService';
+import aiService from '../services/aiService';
 import Layout from '../components/Layout';
 
 export default function RequirementBidPage() {
@@ -17,6 +18,11 @@ export default function RequirementBidPage() {
   const [submitError, setSubmitError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // AI Proposal Coach state
+  const [proposalFeedback, setProposalFeedback] = useState(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState('');
 
   useEffect(() => {
     async function fetchRequirement() {
@@ -52,6 +58,28 @@ export default function RequirementBidPage() {
       setSubmitError(err.message);
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleReviewProposal() {
+    setIsReviewing(true);
+    setReviewError('');
+    try {
+      const feedback = await aiService.reviewProposal(
+        {
+          requirementTitle: requirement?.title ?? '',
+          requirementDescription: requirement?.description ?? '',
+          proposedBudget: form.proposedBudget,
+          proposedTimeline: form.proposedTimeline,
+          message: form.message,
+        },
+        token
+      );
+      setProposalFeedback(feedback);
+    } catch (err) {
+      setReviewError(err.message);
+    } finally {
+      setIsReviewing(false);
     }
   }
 
@@ -110,6 +138,57 @@ export default function RequirementBidPage() {
               <textarea id="message" name="message" rows={5} value={form.message} onChange={handleChange}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
             </div>
+
+            {/* AI Proposal Coach */}
+            <div>
+              <button
+                type="button"
+                onClick={handleReviewProposal}
+                disabled={isReviewing || form.message.trim().length < 10}
+                className="inline-flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+              >
+                {isReviewing ? '✨ Reviewing…' : '✨ Get AI Feedback'}
+              </button>
+              {reviewError && <p className="text-sm text-red-600 mt-2">{reviewError}</p>}
+
+              {proposalFeedback && (
+                <div className="mt-3 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-purple-800 mb-3">✨ AI Proposal Coach</p>
+
+                  {/* Score bar */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex-1 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="h-2 rounded-full bg-indigo-500"
+                        style={{ width: `${(proposalFeedback.score / 10) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 shrink-0">
+                      {proposalFeedback.score}/10
+                    </span>
+                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${
+                      proposalFeedback.verdict === 'Strong' ? 'bg-green-100 text-green-800'
+                      : proposalFeedback.verdict === 'Good' ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-red-100 text-red-800'
+                    }`}>
+                      {proposalFeedback.verdict}
+                    </span>
+                  </div>
+
+                  {proposalFeedback.strengths && (
+                    <p className="text-xs text-green-700 mb-2">
+                      <span className="font-medium">✓ Strengths: </span>{proposalFeedback.strengths}
+                    </p>
+                  )}
+                  {proposalFeedback.improvements && (
+                    <p className="text-xs text-amber-700">
+                      <span className="font-medium">→ Improve: </span>{proposalFeedback.improvements}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <button type="submit" disabled={isSubmitting}
               className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
               {isSubmitting ? 'Submitting…' : 'Submit Proposal'}

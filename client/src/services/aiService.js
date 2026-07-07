@@ -19,4 +19,43 @@ async function generateRequirement(roughIdea, token) {
   }
 }
 
-export default { generateRequirement };
+async function matchProviders(requirementId, token) {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/api/ai/match-providers`,
+      { requirementId },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+async function analyseBids(requirementId, token) {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/api/ai/analyse-bids`,
+      { requirementId },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+async function reviewProposal(payload, token) {
+  try {
+    const response = await axios.post(
+      `${BASE_URL}/api/ai/review-proposal`,
+      payload,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data;
+  } catch (error) {
+    throw new Error(extractErrorMessage(error));
+  }
+}
+
+export default { generateRequirement, matchProviders, analyseBids, reviewProposal };

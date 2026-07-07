@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import requirementService from '../services/requirementService';
 import bidService from '../services/bidService';
 import dealService from '../services/dealService';
+import aiService from '../services/aiService';
 import { VALID_CATEGORIES } from '../constants/categories';
 import Layout from '../components/Layout';
 
@@ -36,6 +37,11 @@ export default function RequirementDetailPage() {
   const [bidsError, setBidsError] = useState('');
   const [acceptError, setAcceptError] = useState('');
   const [dealCreatedMessage, setDealCreatedMessage] = useState('');
+
+  // AI bid analysis state
+  const [bidAnalysis, setBidAnalysis] = useState(null);
+  const [isAnalysing, setIsAnalysing] = useState(false);
+  const [analysisError, setAnalysisError] = useState('');
 
   useEffect(() => {
     async function fetchRequirement() {
@@ -114,6 +120,19 @@ export default function RequirementDetailPage() {
       setDealCreatedMessage('Deal created!');
     } catch (err) {
       setAcceptError(err.message);
+    }
+  }
+
+  async function handleAnalyseBids() {
+    setIsAnalysing(true);
+    setAnalysisError('');
+    try {
+      const result = await aiService.analyseBids(id, token);
+      setBidAnalysis(result);
+    } catch (err) {
+      setAnalysisError(err.message);
+    } finally {
+      setIsAnalysing(false);
     }
   }
 
@@ -207,7 +226,47 @@ export default function RequirementDetailPage() {
 
       {/* Proposals section */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-800 mb-3">Proposals</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-gray-800">Proposals</h2>
+          {bids.length >= 2 && (
+            <button
+              onClick={handleAnalyseBids}
+              disabled={isAnalysing}
+              className="inline-flex items-center gap-1 bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors"
+            >
+              {isAnalysing ? '✨ Analysing…' : bidAnalysis ? '✨ Refresh Analysis' : '✨ Analyse Proposals with AI'}
+            </button>
+          )}
+        </div>
+
+        {analysisError && <p className="text-sm text-red-600 mb-3">{analysisError}</p>}
+
+        {/* AI analysis card */}
+        {bidAnalysis && typeof bidAnalysis.summary === 'string' && (
+          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-5 mb-4">
+            <p className="text-xs font-semibold text-purple-800 mb-3">✨ AI Proposal Analysis</p>
+            <p className="text-sm text-gray-700 mb-3">{bidAnalysis.summary}</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                <p className="text-xs font-medium text-green-700 mb-0.5">Best Value</p>
+                <p className="text-sm font-semibold text-green-900">{bidAnalysis.bestValue}</p>
+                <p className="text-xs text-green-700 mt-0.5">{bidAnalysis.bestValueReason}</p>
+              </div>
+              {bidAnalysis.concerns && (
+                <div className="flex-1 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <p className="text-xs font-medium text-amber-700 mb-0.5">Watch Out For</p>
+                  <p className="text-xs text-amber-800">{bidAnalysis.concerns}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {/* Plain text analysis (e.g. "Not enough proposals") */}
+        {bidAnalysis && typeof bidAnalysis.analysis === 'string' && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 mb-4 text-sm text-gray-600">
+            {bidAnalysis.analysis}
+          </div>
+        )}
         {bidsError && <p className="text-sm text-red-600 mb-2">{bidsError}</p>}
         {acceptError && <p className="text-sm text-red-600 mb-2">{acceptError}</p>}
         {dealCreatedMessage && (
